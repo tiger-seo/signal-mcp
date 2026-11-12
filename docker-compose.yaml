@@ -1,0 +1,49 @@
+services:
+  signal-cli-rest-api:
+    image: bbernhard/signal-cli-rest-api:latest
+    container_name: signal-cli-rest-api
+    restart: unless-stopped
+    environment:
+      # json-rpc — один довготривалий процес signal-cli, найшвидший режим,
+      # саме його використовує signal-mcp-client у своїх інструкціях (WebSocket + REST)
+      - MODE=native
+    ports:
+      # 8080 треба назовні хоча б на час прив'язки акаунту (сканування QR-коду)
+      # Після лінкування можна прибрати проброс порту й лишити сервіс тільки у внутрішній мережі
+      - "8080:8080"
+    volumes:
+      # тут зберігаються ключі/сесія signal-cli — не видаляй цю папку без потреби
+      - ./signal-cli-config:/home/.local/share/signal-cli
+    networks:
+      - signal-net
+
+  signal-mcp-server:
+    build:
+      context: ./signal-mcp-server
+    container_name: signal-mcp-server
+    restart: unless-stopped
+    depends_on:
+      - signal-cli-rest-api
+    environment:
+      # required — fails fast with a clear error if not set in .env
+      - SIGNAL_NUMBER=${SIGNAL_NUMBER:?set SIGNAL_NUMBER in .env, e.g. +15551234567}
+      # talk to the other container by its service name, over the shared network
+      - SIGNAL_API_BASE_URL=http://signal-cli-rest-api:8080
+      # 0.0.0.0 so the port mapping below actually works; still only exposed
+      # to the host on 127.0.0.1 by default, see the "ports" section
+      - MCP_HTTP_HOST=0.0.0.0
+      - MCP_HTTP_PORT=8081
+      # optional bearer token — required if you ever widen the port binding
+      # below beyond 127.0.0.1
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    ports:
+      # bound to localhost only by default; widen only if you need remote
+      # access, and only ever together with MCP_AUTH_TOKEN set
+      - "127.0.0.1:8081:8081"
+    networks:
+      - signal-net
+
+networks:
+  signal-net:
+    driver: bridge

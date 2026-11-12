@@ -1,0 +1,5 @@
+.env
+signal-cli-config/
+signal-mcp-v1/
+*.log
+*.exe
